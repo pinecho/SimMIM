@@ -19,17 +19,68 @@ from .vision_transformer import VisionTransformer
 class SwinTransformerForSimMIM(SwinTransformer):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-
+        # we inherit self.window_size from SwinTransformer
         assert self.num_classes == 0
 
         self.mask_token = nn.Parameter(torch.zeros(1, 1, self.embed_dim))
         trunc_normal_(self.mask_token, mean=0., std=.02)
 
-    def forward(self, x, mask):
+    def random_masking(self, x, mask_ratio):
+        """
+        Perform per-sample random masking by per-sample shuffling.
+        Per-sample shuffling is done by argsort random noise.
+        x: [N, L, D], sequence
+        """
+        N, L, D = x.shape  # batch, length, dim
+        len_keep = int(L * (1 - mask_ratio))
+        
+        noise = torch.rand(N, L, device=x.device)  # noise in [0, 1]
+        
+        # sort noise for each sample
+        ids_shuffle = torch.argsort(noise, dim=1)  # ascend: small is keep, large is remove
+        ids_restore = torch.argsort(ids_shuffle, dim=1)
+
+        # keep the first subset
+        ids_keep = ids_shuffle[:, :len_keep]
+        x_masked = torch.gather(x, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, D))
+
+        # generate the binary mask: 0 is keep, 1 is remove
+        mask = torch.ones([N, L], device=x.device)
+        mask[:, :len_keep] = 0
+        # unshuffle to get the binary mask
+        mask = torch.gather(mask, dim=1, index=ids_restore)
+
+        return x_masked, mask, ids_restore
+
+
+    def forward(self, x, mask, ):
         x = self.patch_embed(x)
+        B, L, _ = x.shape 
+        # if mask is None:
+            # SAVE for debug
+            # L=2304, sqrt(2304)=48, we want a mask with 48x48
+            # img_size=192x192, window_size=6x6, -> each window shape is 192/6=32x32
+            # patch_size=4x4, -> each window contains 32/4=8x8 patches
+            # Here, we mask in window level, so we get a mask of 6x6
+            # if we want to mask in patch level, then the mask is of 192/4=48x48
+            # in each window, there are 8x8, so the base mask is 6x6, then multiply 8 to 48x48
+            # if window_level:
+            #     x_ = torch.randn(B, self.window_size, self.window_size).flatten(1).unsqueeze(2)
+            #     _, mask, _ = self.random_masking(x_, mask_ratio=mask_ratio)
+            #     mask_hw = mask.reshape(B, self.window_size, self.window_size) # here the mask_hw is with the shape (1, 6, 6)
+            #     window_shape = self.img_size/self.window_size
+            #     num_patch_iw = window_shape/self.patch_size # number of patch per line in a window, here is 8
+            #     assert L**0.5 == self.window_size*num_patch_iw, f"length {L} != {self.window_size}*{num_patch_iw}"
+            #     mask = mask_hw.repeat_interleave(repeats=int(num_patch_iw), dim=1).repeat_interleave(repeats=int(num_patch_iw), dim=2) #.flatten(1)#.contiguous()
+            #     # [1, 6, 6] repeat 8 times -> [1, 48, 48]
+            #     # import ipdb; ipdb.set_trace()
+            #     # mask_nchw = self.unpatchify(mask_hw) # mask_nchw
+            # else:
+            #     _, mask, _ = self.random_masking(x, mask_ratio=mask_ratio)
+            #     mask_hw = mask.reshape(B, int(self.img_size/self.patch_size), int(self.img_size/self.patch_size)) #192/4=48, 48*48=2304
 
         assert mask is not None
-        B, L, _ = x.shape
+        # B, L, _ = x.shape
 
         mask_tokens = self.mask_token.expand(B, L, -1)
         w = mask.flatten(1).unsqueeze(-1).type_as(mask_tokens)
