@@ -1,0 +1,12 @@
+Pleae make sure this directory contains following files:
+- simmim_pretrain__swin_base__img192_window6__100ep.yaml   
+- simmim_pretrain__swin_large__img192_window12__800ep.yaml
+- simmim_pretrain__swin_base__img192_window6__800ep.yaml  
+- simmim_pretrain__vit_base__img224__800ep.yaml
+
+- simmim_finetune__swin_base__img224_window7__100ep.pth  
+- simmim_pretrain__swin_base__img192_window6__800ep.pth    
+- simmim_pretrain__vit_base__img224__800ep.pth
+- simmim_finetune__vit_base__img224__800ep.pth           
+- simmim_pretrain__swin_base__img192_window6__100ep.pth  
+- simmim_pretrain__swin_large__img192_window12__800ep.pth
